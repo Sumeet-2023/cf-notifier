@@ -14,6 +14,7 @@ Configuration (environment variables; set whichever channels you use):
   NTFY_TOPIC             ntfy.sh topic name (people subscribe in the ntfy app)
   NTFY_SERVER            optional, defaults to https://ntfy.sh
   CF_HANDLES             optional, comma-separated handles to show deltas for
+  ONLY_IF_PARTICIPATED   "true" to only notify for contests where a CF_HANDLES handle was rated
   STATE_FILE             optional, defaults to state.json
   LOOKBACK_DAYS          optional, how far back to look for finished contests (default 7)
 
@@ -67,6 +68,10 @@ def redact(text):
             if len(p) >= 4:
                 text = text.replace(p, "***")
     return text
+
+
+def truthy(name):
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
 
 
 def warn(msg):
@@ -247,7 +252,7 @@ def send_discord(text):
     if not url:
         return None
     validate_discord_url(url)
-    ping =os.environ.get("DISCORD_PING_EVERYONE", "").strip().lower() in ("1", "true", "yes")
+    ping = truthy("DISCORD_PING_EVERYONE")
     for i, part in enumerate(split_text(text, 1900)):
         payload = {
             "content": ("@everyone " if ping and i == 0 else "") + part,
@@ -355,6 +360,11 @@ def main():
             print("FAILED:", f)
         return 1 if failed else 0
 
+    only_mine = truthy("ONLY_IF_PARTICIPATED")
+    if only_mine and not handles:
+        print("ONLY_IF_PARTICIPATED is on, but CF_HANDLES is empty. Add your handle to CF_HANDLES.")
+        return 1
+
     notified, first_run = load_state()
     seen = set(notified)
 
@@ -396,8 +406,21 @@ def main():
         print(f"First run: remembered {len(updates)} already-updated contest(s); nothing sent.")
         return 0
 
+    skipped = []
+    if only_mine:
+        # Keep only contests where someone from CF_HANDLES got a rating change.
+        # The rest are remembered as done, so they're never checked again.
+        watch = {h.lower() for h in handles}
+        skipped = [c for c, ch in updates if not any(x["handle"].lower() in watch for x in ch)]
+        updates = [(c, ch) for c, ch in updates if any(x["handle"].lower() in watch for x in ch)]
+        if skipped:
+            notified += [c["id"] for c in skipped]
+            save_state(notified)
+            print("Ratings out, but none of your handles took part in:", "; ".join(c["name"] for c in skipped))
+
     if not updates:
-        print(f"No new rating updates ({len(candidates)} finished contest(s) still pending or unrated).")
+        if not (only_mine and skipped):
+            print(f"No new rating updates ({len(candidates)} finished contest(s) still pending or unrated).")
         return 0
 
     text = build_message(updates, handles)

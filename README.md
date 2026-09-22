@@ -66,6 +66,9 @@ Anyone who knows the name can also *send* messages to the topic, so a leaked nam
 **Optional: show your group's rating changes**
 Under **Variables**, add `CF_HANDLES` = `your_handle, friend1, friend2` (comma-separated, case doesn't matter).
 
+**Optional: only get pinged for contests you took part in**
+Also add the variable `ONLY_IF_PARTICIPATED` = `true`. You'll then only hear about contests where a handle from `CF_HANDLES` got a rating change, and the message lists only those contests. Rounds you skipped, or took part in unrated, are passed over silently. With several handles, a contest counts if any of them was rated. Set it back to `false` (or delete it) to hear about every rated round again.
+
 ### 3. Test it
 
 1. Open the **Actions** tab → **Codeforces rating notifier** → **Run workflow**, tick **Send a test message**, and run it. A "✅ set up" message should arrive in every channel you configured.

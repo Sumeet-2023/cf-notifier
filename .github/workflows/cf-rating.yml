@@ -40,6 +40,7 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
           CF_HANDLES: ${{ vars.CF_HANDLES }}
+          ONLY_IF_PARTICIPATED: ${{ vars.ONLY_IF_PARTICIPATED }}
           TEST_MODE: ${{ inputs.test }}
         run: |
           if [ "$TEST_MODE" = "true" ]; then

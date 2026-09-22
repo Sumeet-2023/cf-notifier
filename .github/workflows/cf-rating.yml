@@ -1,0 +1,64 @@
+name: Codeforces rating notifier
+
+on:
+  schedule:
+    # Every 10 minutes (:04, :14, :24 ...), off the busy top of the hour.
+    # GitHub may still start scheduled runs a few minutes late.
+    - cron: "4-59/10 * * * *"
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "Send a test message instead of checking"
+        type: boolean
+        default: false
+
+# No token permissions by default; the job asks only for what it needs.
+permissions: {}
+
+concurrency:
+  group: cf-rating-notifier
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check Codeforces ratings
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write   # used only by "Save state" to commit state.json
+    steps:
+      # Pinned to an exact commit, so a moved or hijacked tag can't swap in other code.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false   # the Python step never gets the repo write token
+
+      - name: Check for rating updates
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_PING_EVERYONE: ${{ vars.DISCORD_PING_EVERYONE }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          CF_HANDLES: ${{ vars.CF_HANDLES }}
+          TEST_MODE: ${{ inputs.test }}
+        run: |
+          if [ "$TEST_MODE" = "true" ]; then
+            python3 cf_rating_notifier.py --test
+          else
+            python3 cf_rating_notifier.py
+          fi
+
+      - name: Save state
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          [ -f state.json ] || exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add state.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Update notifier state [skip ci]"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git pull --rebase --quiet
+          git push
